@@ -1,4 +1,4 @@
-// 미라클톡 3단계: 구글 로그인 + 친구 목록 + 1:1 채팅 + 단체방 + 전체 채팅방
+// 미라클톡 4단계: 구글 로그인 + 친구 목록 + 1:1 채팅 + 단체방 + 전체 채팅방 + 프로필 아바타
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
@@ -9,6 +9,7 @@ import {
   query, where, orderBy, limit, onSnapshot, serverTimestamp, writeBatch, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
+import { AVATARS, findAvatar, avatarImagePath } from "./avatars.js";
 
 // ---------- 화면 요소 ----------
 const $ = (id) => document.getElementById(id);
@@ -55,6 +56,60 @@ function stopAll() {
   for (const k of Object.keys(unsub)) {
     if (unsub[k]) { unsub[k](); unsub[k] = null; }
   }
+  stopProfiles();
+}
+
+// ========== 4단계: 프로필(아바타) 실시간 캐시 ==========
+// 친구 목록·방 정보에 저장된 이름/사진은 '추가할 때' 찍어둔 값이라 오래될 수 있어요.
+// 그래서 화면에 보이는 사람의 프로필(users/{uid})을 실시간으로 받아서 최신 아바타를 씁니다.
+const profiles = new Map();      // uid -> { name, photo, avatar }
+const profileUnsubs = new Map(); // uid -> 수신 끊기 함수
+
+function watchProfile(uid) {
+  if (!uid || !currentUser || profileUnsubs.has(uid)) return;
+  const stop = onSnapshot(doc(db, "users", uid), (snap) => {
+    if (!snap.exists()) return;
+    const d = snap.data();
+    const next = { name: d.name || "", photo: d.photo || "", avatar: d.avatar || "" };
+    const old = profiles.get(uid);
+    if (old && old.name === next.name && old.photo === next.photo && old.avatar === next.avatar) return;
+    profiles.set(uid, next);
+    scheduleRerender();
+  }, (err) => console.warn("프로필을 받지 못했어요", uid, err.code));
+  profileUnsubs.set(uid, stop);
+}
+
+function stopProfiles() {
+  for (const stop of profileUnsubs.values()) stop();
+  profileUnsubs.clear();
+  profiles.clear();
+}
+
+// 이 사람을 화면에 그릴 때 쓸 정보 (최신 프로필 우선, 없으면 저장된 값)
+function personInfo(uid, name, photo) {
+  const p = profiles.get(uid);
+  return {
+    name: (p && p.name) || name || "",
+    photo: (p && p.photo) || photo || "",
+    avatar: (p && p.avatar) || "",
+  };
+}
+
+// 프로필이 바뀌면 보이는 화면만 한 번에 다시 그림
+let rerenderQueued = false;
+function scheduleRerender() {
+  if (rerenderQueued) return;
+  rerenderQueued = true;
+  requestAnimationFrame(() => {
+    rerenderQueued = false;
+    if (!currentUser) return;
+    renderMyCard();
+    renderFriends();
+    if (roomsLoaded) renderRooms();
+    if (currentRoomId && lastMsgs) render(lastMsgs);
+    if (pickerOpen) renderPicker();
+    if (avatarSheetOpen) renderAvatarSheet();
+  });
 }
 
 // 두 사람의 1:1 방 ID는 항상 같게: uid 두 개를 정렬해서 붙임
@@ -96,7 +151,9 @@ onAuthStateChanged(auth, async (user) => {
   currentUser = user;
   stopAll();
   if (pickerOpen) { pickerOpen = false; $("picker").classList.add("hidden"); }
+  if (avatarSheetOpen) { avatarSheetOpen = false; $("avatar-sheet").classList.add("hidden"); }
   currentRoomId = null;
+  lastMsgs = null;
   friends = [];
   rooms = [];
   roomsLoaded = false;
@@ -122,6 +179,7 @@ onAuthStateChanged(auth, async (user) => {
     console.error("프로필 저장 실패", e);
   }
 
+  watchProfile(user.uid); // 내 아바타
   subscribeFriends();
   subscribeRooms();
   switchTab("chats");
@@ -129,10 +187,33 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 // ---------- 공통: 아바타 만들기 ----------
-function makeAvatar(name, photo) {
+const brokenImages = new Set(); // 불러오기 실패한 아바타 그림 (다시 시도 안 함)
+
+// 고른 아바타(id) → 라이라 그림이 들어간 동그라미
+// (그림을 못 불러오면 직업 이름 첫 글자로 대신 표시)
+function fillCharacter(el, a) {
+  el.classList.add("char");
+  el.title = a.label;
+  const fallback = () => {
+    el.innerHTML = "";
+    el.textContent = a.label.slice(0, 1);
+  };
+  if (brokenImages.has(a.id)) { fallback(); return; }
+  const img = document.createElement("img");
+  img.src = avatarImagePath(a);
+  img.alt = "";
+  img.decoding = "async";
+  img.onerror = () => { brokenImages.add(a.id); fallback(); };
+  el.appendChild(img);
+}
+
+function makeAvatar(name, photo, avatarId) {
   const avatar = document.createElement("div");
   avatar.className = "avatar";
-  if (photo) {
+  const ch = findAvatar(avatarId);
+  if (ch) {
+    fillCharacter(avatar, ch);
+  } else if (photo) {
     const img = document.createElement("img");
     img.src = photo;
     img.alt = "";
@@ -144,13 +225,20 @@ function makeAvatar(name, photo) {
   return avatar;
 }
 
+// uid로 최신 프로필을 찾아서 아바타 만들기
+function makeAvatarFor(uid, name, photo) {
+  watchProfile(uid);
+  const p = personInfo(uid, name, photo);
+  return makeAvatar(p.name, p.photo, p.avatar);
+}
+
 // 목록에 쓰는 한 줄 (아바타 + 이름 + 부가설명 + 오른쪽 정보)
-function makeListItem({ name, photo, sub, right, avatarEl }) {
+function makeListItem({ name, photo, sub, right, avatarEl, uid }) {
   const li = document.createElement("li");
   li.className = "list-item";
   li.tabIndex = 0;
 
-  li.appendChild(avatarEl || makeAvatar(name, photo));
+  li.appendChild(avatarEl || (uid ? makeAvatarFor(uid, name, photo) : makeAvatar(name, photo)));
 
   const text = document.createElement("div");
   text.className = "list-text";
@@ -197,7 +285,7 @@ for (const btn of document.querySelectorAll(".tab")) {
 function renderMyCard() {
   const card = $("my-card");
   card.innerHTML = "";
-  card.appendChild(makeAvatar(currentUser.displayName, currentUser.photoURL));
+  card.appendChild(makeAvatarFor(currentUser.uid, currentUser.displayName, currentUser.photoURL));
   const text = document.createElement("div");
   text.className = "list-text";
   const n = document.createElement("div");
@@ -208,6 +296,13 @@ function renderMyCard() {
   s.textContent = `내 이메일: ${currentUser.email || ""}`;
   text.append(n, s);
   card.appendChild(text);
+
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.className = "btn-ghost small";
+  edit.textContent = "아바타";
+  edit.addEventListener("click", openAvatarSheet);
+  card.appendChild(edit);
 }
 
 function subscribeFriends() {
@@ -253,7 +348,7 @@ function renderFriends() {
       }
     });
 
-    const li = makeListItem({ name: f.name, photo: f.photo, sub: f.email, right: del });
+    const li = makeListItem({ uid: f.uid, name: personInfo(f.uid, f.name).name, photo: f.photo, sub: f.email, right: del });
     onActivate(li, () => openDM(f));
     list.appendChild(li);
   }
@@ -337,10 +432,11 @@ function otherMember(room) {
   const info = (room.memberInfo && room.memberInfo[otherUid]) || {};
   // 친구 목록에 있으면 그쪽 정보가 더 최신
   const f = friends.find((x) => x.uid === otherUid);
+  const p = personInfo(otherUid, (f && f.name) || info.name, (f && f.photo) || info.photo);
   return {
     uid: otherUid,
-    name: (f && f.name) || info.name || "알 수 없음",
-    photo: (f && f.photo) || info.photo || "",
+    name: p.name || "알 수 없음",
+    photo: p.photo,
   };
 }
 
@@ -399,7 +495,7 @@ function renderRooms() {
       li.querySelector(".list-name").appendChild(count);
     } else {
       const other = otherMember(room);
-      li = makeListItem({ name: other.name, photo: other.photo, sub: preview, right: time });
+      li = makeListItem({ uid: other.uid, name: other.name, photo: other.photo, sub: preview, right: time });
     }
     onActivate(li, () => openRoom(room.id));
     list.appendChild(li);
@@ -455,6 +551,7 @@ function findRoom(roomId) {
 }
 
 let openRoomSeen = false; // 열린 방이 내 방 목록에 한 번이라도 보였는지
+let lastMsgs = null;       // 마지막으로 그린 메시지 (아바타가 바뀌면 다시 그리기용)
 
 function updateRoomHeader() {
   const room = findRoom(currentRoomId);
@@ -480,6 +577,7 @@ function syncOpenRoom() {
 function openRoom(roomId, title, opts = {}) {
   if (unsub.messages) { unsub.messages(); unsub.messages = null; }
   currentRoomId = roomId;
+  lastMsgs = null;
   openRoomSeen = !!findRoom(roomId);
   $("room-title").textContent = title || roomTitle(findRoom(roomId));
   updateRoomHeader();
@@ -498,6 +596,7 @@ function closeRoom() {
   leavingRoom = false;
   if (unsub.messages) { unsub.messages(); unsub.messages = null; }
   currentRoomId = null;
+  lastMsgs = null;
   messagesEl.innerHTML = "";
   if (currentUser) show("main");
 }
@@ -516,6 +615,7 @@ $("btn-back").addEventListener("click", leaveChatScreen);
 
 window.addEventListener("popstate", () => {
   if (skipNextPop) { skipNextPop = false; return; }
+  if (avatarSheetOpen) { closeAvatarSheet(false); return; }
   if (pickerOpen) { closePicker(false); return; }
   if (currentRoomId) closeRoom();
 });
@@ -530,6 +630,7 @@ function subscribeMessages(roomId) {
       ...d.data({ serverTimestamps: "estimate" }),
       pending: d.metadata.hasPendingWrites,
     })).reverse();
+    lastMsgs = msgs;
     render(msgs);
   }, (err) => {
     console.error(err);
@@ -616,7 +717,7 @@ function render(msgs) {
     row.className = `msg-row ${mine ? "mine" : "theirs"} ${grouped ? "grouped" : ""}`;
 
     if (!mine) {
-      const avatar = grouped ? document.createElement("div") : makeAvatar(m.name, m.photo);
+      const avatar = grouped ? document.createElement("div") : makeAvatarFor(m.uid, m.name, m.photo);
       avatar.className = "avatar";
       row.appendChild(avatar);
     }
@@ -785,7 +886,7 @@ function renderPicker() {
     check.className = "check";
     check.textContent = "✓";
     const li = makeListItem({
-      name: f.name, photo: f.photo,
+      uid: f.uid, name: personInfo(f.uid, f.name).name, photo: f.photo,
       sub: already ? "이미 참여 중" : f.email,
       right: already ? null : check,
     });
@@ -941,6 +1042,92 @@ $("btn-leave").addEventListener("click", async () => {
     alert(err.code === "permission-denied"
       ? "나가기 권한이 없어요. 보안 규칙을 3단계용으로 새로 게시했는지 확인해주세요."
       : `나가지 못했어요 (${err.code})`);
+  }
+});
+
+// ========== 4단계: 아바타 고르기 창 ==========
+let avatarSheetOpen = false;
+let avatarChoice = "";   // 고르는 중인 아바타 id ("" = 구글 사진)
+
+function myAvatarId() {
+  const p = profiles.get(currentUser.uid);
+  return (p && p.avatar) || "";
+}
+
+function openAvatarSheet() {
+  avatarChoice = myAvatarId();
+  $("avatar-msg").textContent = "";
+  $("avatar-msg").classList.remove("error");
+  renderAvatarSheet();
+  $("avatar-sheet").classList.remove("hidden");
+  avatarSheetOpen = true;
+  history.pushState({ sheet: "avatar", room: currentRoomId }, "");
+}
+
+function closeAvatarSheet(viaHistory = true) {
+  if (!avatarSheetOpen) return;
+  avatarSheetOpen = false;
+  $("avatar-sheet").classList.add("hidden");
+  if (viaHistory && history.state && history.state.sheet === "avatar") {
+    skipNextPop = true;
+    history.back();
+  }
+}
+
+function avatarOption(id, label, avatarEl) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "avatar-option" + (avatarChoice === id ? " selected" : "");
+  btn.setAttribute("aria-pressed", String(avatarChoice === id));
+  btn.appendChild(avatarEl);
+  const cap = document.createElement("span");
+  cap.className = "avatar-label";
+  cap.textContent = label;
+  btn.appendChild(cap);
+  btn.addEventListener("click", () => {
+    avatarChoice = id;
+    renderAvatarSheet();
+  });
+  return btn;
+}
+
+function renderAvatarSheet() {
+  // 맨 위 미리보기
+  const preview = $("avatar-preview");
+  preview.innerHTML = "";
+  const big = makeAvatar(currentUser.displayName, currentUser.photoURL, avatarChoice);
+  big.classList.add("big");
+  preview.appendChild(big);
+
+  const grid = $("avatar-grid");
+  grid.innerHTML = "";
+  // 첫 칸: 원래 구글 사진 (아바타 안 씀)
+  grid.appendChild(avatarOption("", "구글 사진", makeAvatar(currentUser.displayName, currentUser.photoURL)));
+  for (const a of AVATARS) {
+    grid.appendChild(avatarOption(a.id, a.label, makeAvatar(a.label, "", a.id)));
+  }
+
+  const ok = $("avatar-ok");
+  ok.disabled = avatarChoice === myAvatarId();
+}
+
+$("avatar-close").addEventListener("click", () => closeAvatarSheet());
+
+$("avatar-ok").addEventListener("click", async () => {
+  const btn = $("avatar-ok");
+  btn.disabled = true;
+  $("avatar-msg").textContent = "저장하는 중...";
+  $("avatar-msg").classList.remove("error");
+  try {
+    await setDoc(doc(db, "users", currentUser.uid), { avatar: avatarChoice }, { merge: true });
+    closeAvatarSheet();
+  } catch (err) {
+    console.error(err);
+    $("avatar-msg").textContent = err.code === "permission-denied"
+      ? "권한 오류예요. 보안 규칙을 4단계용으로 새로 게시했는지 확인해주세요."
+      : `저장하지 못했어요 (${err.code})`;
+    $("avatar-msg").classList.add("error");
+    btn.disabled = false;
   }
 });
 

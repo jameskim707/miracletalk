@@ -108,6 +108,22 @@
     </div>
   </div>
 
+  <!-- 4단계: 아바타 고르기 창 -->
+  <div id="avatar-sheet" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="avatar-title">
+    <div class="sheet">
+      <header class="sheet-header">
+        <button type="button" id="avatar-close" class="btn-back" aria-label="닫기">‹</button>
+        <div class="room-title" id="avatar-title">아바타 고르기</div>
+      </header>
+      <div id="avatar-preview" class="avatar-preview"></div>
+      <div id="avatar-grid" class="avatar-grid"></div>
+      <p id="avatar-msg" class="hint"></p>
+      <div class="sheet-footer">
+        <button type="button" id="avatar-ok" class="btn-primary" disabled>저장</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>
