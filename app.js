@@ -70,9 +70,10 @@ function watchProfile(uid) {
   const stop = onSnapshot(doc(db, "users", uid), (snap) => {
     if (!snap.exists()) return;
     const d = snap.data();
-    const next = { name: d.name || "", photo: d.photo || "", avatar: d.avatar || "" };
+    const next = { name: d.name || "", photo: d.photo || "", avatar: d.avatar || "", photoData: d.photoData || "" };
     const old = profiles.get(uid);
-    if (old && old.name === next.name && old.photo === next.photo && old.avatar === next.avatar) return;
+    if (old && old.name === next.name && old.photo === next.photo && old.avatar === next.avatar
+        && old.photoData === next.photoData) return;
     profiles.set(uid, next);
     scheduleRerender();
   }, (err) => console.warn("프로필을 받지 못했어요", uid, err.code));
@@ -92,6 +93,7 @@ function personInfo(uid, name, photo) {
     name: (p && p.name) || name || "",
     photo: (p && p.photo) || photo || "",
     avatar: (p && p.avatar) || "",
+    photoData: (p && p.photoData) || "",
   };
 }
 
@@ -207,11 +209,19 @@ function fillCharacter(el, a) {
   el.appendChild(img);
 }
 
-function makeAvatar(name, photo, avatarId) {
+// 4-2단계: avatar가 "photo"면 내가 직접 올린 사진(photoData) 사용
+const PHOTO_ID = "photo";
+
+function makeAvatar(name, photo, avatarId, photoData) {
   const avatar = document.createElement("div");
   avatar.className = "avatar";
   const ch = findAvatar(avatarId);
-  if (ch) {
+  if (avatarId === PHOTO_ID && photoData) {
+    const img = document.createElement("img");
+    img.src = photoData;
+    img.alt = "";
+    avatar.appendChild(img);
+  } else if (ch) {
     fillCharacter(avatar, ch);
   } else if (photo) {
     const img = document.createElement("img");
@@ -229,7 +239,7 @@ function makeAvatar(name, photo, avatarId) {
 function makeAvatarFor(uid, name, photo) {
   watchProfile(uid);
   const p = personInfo(uid, name, photo);
-  return makeAvatar(p.name, p.photo, p.avatar);
+  return makeAvatar(p.name, p.photo, p.avatar, p.photoData);
 }
 
 // 목록에 쓰는 한 줄 (아바타 + 이름 + 부가설명 + 오른쪽 정보)
@@ -1052,15 +1062,22 @@ $("btn-leave").addEventListener("click", async () => {
 
 // ========== 4단계: 아바타 고르기 창 ==========
 let avatarSheetOpen = false;
-let avatarChoice = "";   // 고르는 중인 아바타 id ("" = 구글 사진)
+let avatarChoice = "";   // 고르는 중인 아바타 id ("" = 구글 사진, "photo" = 내가 올린 사진)
+let pendingPhoto = "";   // 이번에 새로 올려서 아직 저장 안 한 사진
 
 function myAvatarId() {
   const p = profiles.get(currentUser.uid);
   return (p && p.avatar) || "";
 }
 
+function mySavedPhoto() {
+  const p = profiles.get(currentUser.uid);
+  return (p && p.photoData) || "";
+}
+
 function openAvatarSheet() {
   avatarChoice = myAvatarId();
+  pendingPhoto = "";
   $("avatar-msg").textContent = "";
   $("avatar-msg").classList.remove("error");
   renderAvatarSheet();
@@ -1097,24 +1114,111 @@ function avatarOption(id, label, avatarEl) {
 }
 
 function renderAvatarSheet() {
+  const myPhoto = pendingPhoto || mySavedPhoto();
+
   // 맨 위 미리보기
   const preview = $("avatar-preview");
   preview.innerHTML = "";
-  const big = makeAvatar(currentUser.displayName, currentUser.photoURL, avatarChoice);
+  const big = makeAvatar(currentUser.displayName, currentUser.photoURL, avatarChoice, myPhoto);
   big.classList.add("big");
   preview.appendChild(big);
 
   const grid = $("avatar-grid");
   grid.innerHTML = "";
-  // 첫 칸: 원래 구글 사진 (아바타 안 씀)
+
+  // 첫 칸: 사진 올리기 (폰이면 갤러리/카메라가 열림)
+  const up = document.createElement("button");
+  up.type = "button";
+  up.className = "avatar-option";
+  const upIcon = document.createElement("div");
+  upIcon.className = "avatar upload";
+  upIcon.textContent = "📷";
+  const upCap = document.createElement("span");
+  upCap.className = "avatar-label";
+  upCap.textContent = myPhoto ? "다른 사진" : "사진 올리기";
+  up.append(upIcon, upCap);
+  up.addEventListener("click", () => $("photo-input").click());
+  grid.appendChild(up);
+
+  // 올린 사진이 있으면 '내 사진' 칸
+  if (myPhoto) {
+    grid.appendChild(avatarOption(PHOTO_ID, "내 사진",
+      makeAvatar(currentUser.displayName, "", PHOTO_ID, myPhoto)));
+  }
+
+  // 원래 구글 사진 (아바타 안 씀)
   grid.appendChild(avatarOption("", "구글 사진", makeAvatar(currentUser.displayName, currentUser.photoURL)));
   for (const a of AVATARS) {
     grid.appendChild(avatarOption(a.id, a.label, makeAvatar(a.label, "", a.id)));
   }
 
   const ok = $("avatar-ok");
-  ok.disabled = avatarChoice === myAvatarId();
+  const photoChanged = avatarChoice === PHOTO_ID && pendingPhoto && pendingPhoto !== mySavedPhoto();
+  ok.disabled = avatarChoice === myAvatarId() && !photoChanged;
 }
+
+// ---------- 4-2단계: 내 사진 올리기 ----------
+// 폰 사진(보통 3~5MB)을 폰 안에서 가운데 정사각형으로 자르고 작게 줄여서 저장
+// → Firebase Storage 없이 무료 요금제 그대로 사용
+const PHOTO_SIZE = 256;        // 저장 크기 (가로세로 px)
+const PHOTO_MAX_CHARS = 120000; // 보안 규칙 한도(150,000자)보다 여유 있게
+
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("이미지를 열 수 없어요")); };
+    img.src = url;
+  });
+}
+
+async function shrinkPhoto(file) {
+  const img = await loadImage(file); // 폰 사진의 회전 정보(EXIF)는 브라우저가 알아서 반영
+  const w = img.naturalWidth, h = img.naturalHeight;
+  if (!w || !h) throw new Error("이미지 크기를 알 수 없어요");
+  const side = Math.min(w, h);
+  const sx = (w - side) / 2, sy = (h - side) / 2;
+
+  for (const size of [PHOTO_SIZE, 192, 160]) {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff"; // 투명 PNG는 흰 배경으로
+    ctx.fillRect(0, 0, size, size);
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+    for (const q of [0.82, 0.7, 0.6]) {
+      const data = canvas.toDataURL("image/jpeg", q);
+      if (data.length <= PHOTO_MAX_CHARS) return data;
+    }
+  }
+  throw new Error("사진을 충분히 줄이지 못했어요");
+}
+
+$("photo-input").addEventListener("change", async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ""; // 같은 사진을 다시 골라도 동작하게
+  if (!file) return;
+  const msg = $("avatar-msg");
+  if (!file.type.startsWith("image/")) {
+    msg.textContent = "사진 파일만 올릴 수 있어요.";
+    msg.classList.add("error");
+    return;
+  }
+  msg.textContent = "사진 줄이는 중...";
+  msg.classList.remove("error");
+  try {
+    pendingPhoto = await shrinkPhoto(file);
+    avatarChoice = PHOTO_ID;
+    msg.textContent = "이 사진으로 할까요? 저장을 눌러주세요.";
+    renderAvatarSheet();
+  } catch (err) {
+    console.error(err);
+    msg.textContent = `사진을 쓸 수 없어요 (${err.message}). 다른 사진으로 해보세요.`;
+    msg.classList.add("error");
+  }
+});
 
 $("avatar-close").addEventListener("click", () => closeAvatarSheet());
 $("me-avatar").addEventListener("click", openAvatarSheet);
@@ -1128,12 +1232,15 @@ $("avatar-ok").addEventListener("click", async () => {
   $("avatar-msg").textContent = "저장하는 중...";
   $("avatar-msg").classList.remove("error");
   try {
-    await setDoc(doc(db, "users", currentUser.uid), { avatar: avatarChoice }, { merge: true });
+    const data = { avatar: avatarChoice };
+    if (avatarChoice === PHOTO_ID && pendingPhoto) data.photoData = pendingPhoto;
+    await setDoc(doc(db, "users", currentUser.uid), data, { merge: true });
+    pendingPhoto = "";
     closeAvatarSheet();
   } catch (err) {
     console.error(err);
     $("avatar-msg").textContent = err.code === "permission-denied"
-      ? "권한 오류예요. 보안 규칙을 4단계용으로 새로 게시했는지 확인해주세요."
+      ? "권한 오류예요. 보안 규칙을 4-2단계용으로 새로 게시했는지 확인해주세요."
       : `저장하지 못했어요 (${err.code})`;
     $("avatar-msg").classList.add("error");
     btn.disabled = false;

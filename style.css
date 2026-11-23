@@ -264,3 +264,9 @@ html, body {
 .my-card:hover, .my-card:focus-visible { background: #f4f5fa; }
 .me-name { cursor: pointer; outline: none; }
 .me-name:hover, .me-name:focus-visible { color: var(--primary); }
+
+/* 4-2단계: 사진 올리기 칸 */
+.avatar.upload {
+  background: #f1f2f8; border: 2px dashed #c5c9da; font-size: 24px; color: var(--muted);
+}
+.avatar-option:hover .avatar.upload { border-color: var(--primary); }

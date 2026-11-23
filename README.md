@@ -1,4 +1,4 @@
-# 미라클톡 — 4단계
+# 미라클톡 — 4-2단계
 
 구글 로그인 + 친구 목록 + 1:1 채팅 + 단체방 + 전체 채팅방 + 프로필 아바타
 
@@ -118,9 +118,23 @@ Authentication → **설정** 탭 → **승인된 도메인** → `행님아이�
    (지금 그림은 `.webp`. PNG를 쓰려면 `avatarImagePath`의 확장자도 같이 바꾸기)
 3. 이미 있는 id는 바꾸지 않기 (사람들이 고른 아바타가 id로 저장돼 있음)
 
+## 4-2단계: 내 사진 올리기
+적용: `index.html`, `app.js`, `style.css`, `sw.js`, `firestore.rules`, `README.md` 덮어쓰기
+→ Firebase 콘솔에서 새 `firestore.rules` **게시** (users 부분에 `photoData` 칸 추가)
+
+동작: 폰에서 고른 사진을 앱이 가운데 정사각형으로 자르고 256px JPEG(약 20~40KB)로 줄여서
+`users/{uid}.photoData`에 저장. Firebase Storage는 안 씀 (무료 요금제 그대로).
+
+테스트
+- [ ] 아바타 고르기 창 첫 칸 **📷 사진 올리기** → 폰에서는 갤러리/카메라가 열림
+- [ ] 사진 고르면 미리보기에 동그랗게 보이고 "내 사진" 칸이 생김 → **저장**
+- [ ] 친구 화면(다른 계정)에서도 내 사진으로 바뀜
+- [ ] 세로로 찍은 폰 사진이 옆으로 눕지 않음
+- [ ] 다른 아바타로 바꿨다가 다시 "내 사진" 고르면 올린 사진이 그대로 있음
+
 ## 데이터 구조
 ```
-users/{uid}                     — name, photo, email(소문자), lastLogin
+users/{uid}                     — name, photo, email(소문자), lastLogin, avatar, photoData
 users/{uid}/friends/{친구uid}    — name, photo, email, addedAt (나만 읽고 씀)
 rooms/lobby/messages/{메시지ID}   — 전체 채팅방 (방 문서 없이 메시지만)
 rooms/dm_{uidA}_{uidB}          — type, members[2], memberInfo, lastMessage, createdAt, updatedAt

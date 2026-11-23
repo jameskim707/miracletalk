@@ -40,14 +40,19 @@ service cloud.firestore {
       allow list: if signedIn() && request.query.limit <= 1;
 
       // 본인만 수정, 이메일은 실제 로그인한 구글 이메일만 저장 가능 (사칭 방지)
-      // 4단계: avatar = 고른 아바타 id (영어 소문자·숫자·-·_ 20자 이내, 빈 값 = 구글 사진)
+      // 4단계: avatar = 고른 아바타 id (영어 소문자·숫자·-·_ 20자 이내, 빈 값 = 구글 사진, "photo" = 직접 올린 사진)
+      // 4-2단계: photoData = 직접 올린 사진 (폰에서 256px로 줄인 JPEG, 150,000자 이하)
       allow write: if signedIn()
         && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['name', 'photo', 'email', 'lastLogin', 'avatar'])
+        && request.resource.data.keys().hasOnly(['name', 'photo', 'email', 'lastLogin', 'avatar', 'photoData'])
         && request.resource.data.email == request.auth.token.email.lower()
         && (!('avatar' in request.resource.data)
             || (request.resource.data.avatar is string
-                && request.resource.data.avatar.matches('[a-z0-9_-]{0,20}')));
+                && request.resource.data.avatar.matches('[a-z0-9_-]{0,20}')))
+        && (!('photoData' in request.resource.data)
+            || (request.resource.data.photoData is string
+                && request.resource.data.photoData.size() <= 150000
+                && request.resource.data.photoData.matches('data:image/jpeg;base64,[A-Za-z0-9+/=]+')));
 
       // 내 친구 목록: 나만 읽고 쓸 수 있음
       match /friends/{friendUid} {
