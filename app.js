@@ -50,7 +50,8 @@ let currentRoomId = null;          // 지금 열려 있는 방
 let friends = [];                  // 친구 목록 캐시
 let rooms = [];                    // 내 방 목록 캐시 (1:1 + 단체)
 let roomsLoaded = false;
-const unsub = { messages: null, rooms: null, friends: null };
+const unsub = { messages: null, rooms: null, friends: null, hidden: null };
+const hiddenRooms = new Map();     // 4-3단계: 내가 나간 1:1 방 → 나간 시각
 
 function stopAll() {
   for (const k of Object.keys(unsub)) {
@@ -159,6 +160,7 @@ onAuthStateChanged(auth, async (user) => {
   friends = [];
   rooms = [];
   roomsLoaded = false;
+  hiddenRooms.clear();
 
   if (!user) {
     messagesEl.innerHTML = "";
@@ -183,6 +185,7 @@ onAuthStateChanged(auth, async (user) => {
 
   watchProfile(user.uid); // 내 아바타
   subscribeFriends();
+  subscribeHidden();
   subscribeRooms();
   switchTab("chats");
   show("main");
@@ -485,7 +488,10 @@ function renderRooms() {
   onActivate(lobby, () => openRoom(LOBBY_ID, "전체 채팅방"));
   list.appendChild(lobby);
 
+  let shown = 0;
   for (const room of rooms) {
+    if (isHidden(room)) continue; // 내가 나간 1:1 방 (새 메시지가 오면 다시 보임)
+    shown++;
     const isGroup = room.type === "group";
     const time = document.createElement("span");
     time.className = "list-time";
@@ -512,11 +518,15 @@ function renderRooms() {
       const other = otherMember(room);
       li = makeListItem({ uid: other.uid, name: other.name, photo: other.photo, sub: preview, right: time });
     }
-    onActivate(li, () => openRoom(room.id));
+    onActivate(li, () => {
+      if (li.dataset.longpress) { delete li.dataset.longpress; return; }
+      openRoom(room.id);
+    });
+    addLongPress(li, () => askLeaveRoom(room));
     list.appendChild(li);
   }
 
-  if (rooms.length === 0) {
+  if (shown === 0) {
     const p = document.createElement("li");
     p.className = "empty";
     p.textContent = "친구 탭에서 친구를 누르면 1:1 대화가, 위의 '+ 새 단체방'으로 단체 대화가 시작돼요.";
@@ -573,7 +583,8 @@ function updateRoomHeader() {
   const isGroup = room && room.type === "group";
   if (room) $("room-title").textContent = roomTitle(room);
   $("btn-invite").classList.toggle("hidden", !isGroup);
-  $("btn-leave").classList.toggle("hidden", !isGroup);
+  // 나가기: 단체방 + 1:1 방 (전체 채팅방은 없음)
+  $("btn-leave").classList.toggle("hidden", !room);
   $("room-me").textContent = currentUser ? `나: ${currentUser.displayName || "나"}` : "";
 }
 
@@ -681,7 +692,10 @@ function shortTime(date) {
 }
 
 // ---------- 메시지 그리기 ----------
-function render(msgs) {
+function render(allMsgs) {
+  // 4-3단계: 내가 나갔던 1:1 방이면 나간 뒤의 메시지만 보여줌
+  const cut = hiddenRooms.get(currentRoomId);
+  const msgs = cut ? allMsgs.filter((m) => toDate(m.createdAt) > cut) : allMsgs;
   const nearBottom =
     messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 120;
   const lastIsMine = msgs.length && msgs[msgs.length - 1].uid === currentUser?.uid;
@@ -1034,7 +1048,9 @@ function systemMessage(text) {
 // ---------- 나가기 ----------
 $("btn-leave").addEventListener("click", async () => {
   const room = findRoom(currentRoomId);
-  if (!room || room.type !== "group") return;
+  if (!room) return;
+  if (room.type === "dm") { askLeaveRoom(room); return; }
+  if (room.type !== "group") return;
   if (!confirm(`'${room.name}' 방에서 나갈까요?\n나가면 대화 내용을 더 이상 볼 수 없고, 다시 들어오려면 초대를 받아야 해요.`)) return;
 
   const roomId = currentRoomId;
@@ -1059,6 +1075,69 @@ $("btn-leave").addEventListener("click", async () => {
       : `나가지 못했어요 (${err.code})`);
   }
 });
+
+// ========== 4-3단계: 1:1 방 나가기 (내 화면에서만 지우기) ==========
+// 방 자체는 그대로 두고, 내 쪽에 '나간 시각'만 기록합니다.
+// → 내 목록에서 사라지고, 다시 열면 그 이후 메시지만 보임
+// → 상대 화면은 그대로, 누구든 새 메시지를 보내면 방이 다시 나타남
+function subscribeHidden() {
+  unsub.hidden = onSnapshot(collection(db, "users", currentUser.uid, "hiddenRooms"), (snap) => {
+    hiddenRooms.clear();
+    for (const d of snap.docs) {
+      const at = d.data({ serverTimestamps: "estimate" }).hiddenAt;
+      if (at) hiddenRooms.set(d.id, toDate(at));
+    }
+    if (roomsLoaded) renderRooms();
+    if (currentRoomId && lastMsgs) render(lastMsgs);
+  }, (err) => console.warn("나간 방 목록을 받지 못했어요", err.code));
+}
+
+function isHidden(room) {
+  const at = hiddenRooms.get(room.id);
+  if (!at) return false;
+  if (!room.lastMessage) return true;              // 대화가 없던 방
+  return toDate(room.updatedAt) <= at;             // 나간 뒤 새 메시지가 없으면 숨김
+}
+
+async function askLeaveRoom(room) {
+  if (room.type === "group") {
+    // 단체방은 기존 '나가기' (방에서 완전히 빠짐)
+    if (currentRoomId !== room.id) openRoom(room.id);
+    $("btn-leave").click();
+    return;
+  }
+  const name = otherMember(room).name;
+  if (!confirm(`${name}님과의 대화방을 나갈까요?\n\n내 화면에서 대화 내용이 지워져요.\n(${name}님 화면에는 그대로 남고, 새 메시지가 오면 방이 다시 생겨요)`)) return;
+  try {
+    await setDoc(doc(db, "users", currentUser.uid, "hiddenRooms", room.id), { hiddenAt: serverTimestamp() });
+    if (currentRoomId === room.id) leaveChatScreen();
+  } catch (err) {
+    console.error(err);
+    alert(err.code === "permission-denied"
+      ? "권한 오류예요. 보안 규칙을 4-3단계용으로 새로 게시했는지 확인해주세요."
+      : `나가지 못했어요 (${err.code})`);
+  }
+}
+
+// 꾹 누르기(폰) / 오른쪽 클릭(PC)
+function addLongPress(el, fn) {
+  let timer = null;
+  const cancel = () => { clearTimeout(timer); timer = null; };
+  el.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse") return; // PC는 오른쪽 클릭으로
+    cancel();
+    timer = setTimeout(() => {
+      timer = null;
+      el.dataset.longpress = "1"; // 손을 뗄 때 방이 열리지 않게
+      if (navigator.vibrate) navigator.vibrate(20);
+      fn();
+    }, 550);
+  });
+  el.addEventListener("pointerup", cancel);
+  el.addEventListener("pointercancel", cancel);
+  el.addEventListener("pointermove", (e) => { if (Math.abs(e.movementY) > 4) cancel(); });
+  el.addEventListener("contextmenu", (e) => { e.preventDefault(); cancel(); fn(); });
+}
 
 // ========== 4단계: 아바타 고르기 창 ==========
 let avatarSheetOpen = false;

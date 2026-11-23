@@ -1,4 +1,4 @@
-# 미라클톡 — 4-2단계
+# 미라클톡 — 4-3단계
 
 구글 로그인 + 친구 목록 + 1:1 채팅 + 단체방 + 전체 채팅방 + 프로필 아바타
 
@@ -132,10 +132,26 @@ Authentication → **설정** 탭 → **승인된 도메인** → `행님아이�
 - [ ] 세로로 찍은 폰 사진이 옆으로 눕지 않음
 - [ ] 다른 아바타로 바꿨다가 다시 "내 사진" 고르면 올린 사진이 그대로 있음
 
+## 4-3단계: 1:1 대화방 나가기
+적용: `app.js`, `style.css`, `sw.js`, `firestore.rules`, `README.md` 덮어쓰기
+→ Firebase 콘솔에서 새 `firestore.rules` **게시** (users 아래 `hiddenRooms` 추가)
+
+동작(카톡과 비슷): 내 목록에서 방이 사라지고, 다시 열면 나간 뒤의 메시지만 보임.
+상대 화면은 그대로. 누구든 새 메시지를 보내면 방이 다시 나타남.
+
+테스트
+- [ ] 1:1 방 안 오른쪽 위 **나가기** → 확인 → 목록에서 사라짐
+- [ ] 채팅 목록에서 방을 **꾹 누르기**(폰) / **오른쪽 클릭**(PC) → 같은 확인창
+- [ ] 상대 화면에는 방과 대화가 그대로 있음
+- [ ] 상대가 메시지 보내면 내 목록에 방이 다시 생기고, 열면 새 메시지만 보임
+- [ ] 친구 탭에서 그 친구를 누르면 빈 방으로 새로 시작
+- [ ] 단체방 꾹 누르기 → 기존 단체방 나가기 확인창
+
 ## 데이터 구조
 ```
 users/{uid}                     — name, photo, email(소문자), lastLogin, avatar, photoData
 users/{uid}/friends/{친구uid}    — name, photo, email, addedAt (나만 읽고 씀)
+users/{uid}/hiddenRooms/{방ID}   — hiddenAt (내가 나간 1:1 방, 나만 읽고 씀)
 rooms/lobby/messages/{메시지ID}   — 전체 채팅방 (방 문서 없이 메시지만)
 rooms/dm_{uidA}_{uidB}          — type, members[2], memberInfo, lastMessage, createdAt, updatedAt
 rooms/{자동ID}                    — 단체방: type:"group", name, members[], memberInfo, createdBy, lastMessage, createdAt, updatedAt

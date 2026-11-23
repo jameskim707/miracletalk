@@ -54,6 +54,15 @@ service cloud.firestore {
                 && request.resource.data.photoData.size() <= 150000
                 && request.resource.data.photoData.matches('data:image/jpeg;base64,[A-Za-z0-9+/=]+')));
 
+      // 4-3단계: 내가 나간 1:1 방 기록 (나만 읽고 씀, 시간은 서버 시간만)
+      match /hiddenRooms/{roomId} {
+        allow read, delete: if signedIn() && request.auth.uid == uid;
+        allow create, update: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['hiddenAt'])
+          && request.resource.data.hiddenAt == request.time;
+      }
+
       // 내 친구 목록: 나만 읽고 쓸 수 있음
       match /friends/{friendUid} {
         allow read, delete: if signedIn() && request.auth.uid == uid;

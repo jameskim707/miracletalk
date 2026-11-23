@@ -270,3 +270,6 @@ html, body {
   background: #f1f2f8; border: 2px dashed #c5c9da; font-size: 24px; color: var(--muted);
 }
 .avatar-option:hover .avatar.upload { border-color: var(--primary); }
+
+/* 4-3단계: 꾹 누를 때 글자 선택·확대 메뉴 막기 */
+#room-list .list-item { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
