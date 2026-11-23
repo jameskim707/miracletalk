@@ -33,7 +33,8 @@
       <header class="chat-header">
         <div class="room-title" id="main-title">채팅</div>
         <div class="me">
-          <span id="me-name"></span>
+          <button type="button" id="me-avatar" class="me-avatar" aria-label="내 아바타 바꾸기" title="아바타 바꾸기"></button>
+          <span id="me-name" class="me-name" tabindex="0" role="button" title="눌러서 아바타 바꾸기"></span>
           <button id="btn-logout" class="btn-ghost">로그아웃</button>
         </div>
       </header>
@@ -48,7 +49,7 @@
 
       <!-- 친구 탭 -->
       <main id="tab-friends" class="tab-panel hidden">
-        <div id="my-card" class="my-card"></div>
+        <div id="my-card" class="my-card" tabindex="0" role="button" title="눌러서 아바타 바꾸기"></div>
 
         <form id="add-friend" class="add-friend">
           <input id="friend-email" type="email" placeholder="친구의 구글 이메일" autocomplete="off" required>

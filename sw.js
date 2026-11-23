@@ -1,6 +1,6 @@
 // 앱 화면 파일만 캐시. Firebase 통신은 건드리지 않습니다.
 // 네트워크 우선: 수정한 코드가 바로 반영되고, 오프라인일 때만 캐시 사용.
-const CACHE = "miracletalk-v5";
+const CACHE = "miracletalk-v6";
 const SHELL = [
   "./", "./index.html", "./style.css", "./app.js", "./avatars.js", "./firebase-config.js",
   "./manifest.json", "./icons/icon-192.png", "./icons/icon-512.png",

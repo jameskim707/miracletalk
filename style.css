@@ -245,3 +245,22 @@ html, body {
   font-size: 12px; color: var(--theirs-text); text-align: center;
   line-height: 1.25; word-break: keep-all;
 }
+
+/* 맨 위 내 이름 옆 아바타 버튼 */
+.me-avatar {
+  padding: 0; border: 0; background: none; cursor: pointer; border-radius: 50%;
+  position: relative; flex-shrink: 0;
+}
+.me-avatar .avatar { width: 34px; height: 34px; font-size: 14px; }
+.me-avatar:hover .avatar { box-shadow: 0 0 0 2px var(--primary); }
+.me-avatar::after {
+  content: "✎"; position: absolute; right: -3px; bottom: -3px;
+  width: 15px; height: 15px; border-radius: 50%; font-size: 9px; line-height: 15px; text-align: center;
+  background: var(--primary); color: #fff; border: 1.5px solid #fff;
+}
+
+/* 내 프로필 카드·이름 눌러서 아바타 바꾸기 */
+.my-card { cursor: pointer; outline: none; }
+.my-card:hover, .my-card:focus-visible { background: #f4f5fa; }
+.me-name { cursor: pointer; outline: none; }
+.me-name:hover, .me-name:focus-visible { color: var(--primary); }

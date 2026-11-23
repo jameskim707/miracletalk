@@ -283,6 +283,11 @@ for (const btn of document.querySelectorAll(".tab")) {
 
 // ---------- 친구 탭 ----------
 function renderMyCard() {
+  // 맨 위 내 이름 옆 작은 아바타 (누르면 아바타 고르기)
+  const meAv = $("me-avatar");
+  meAv.innerHTML = "";
+  meAv.appendChild(makeAvatarFor(currentUser.uid, currentUser.displayName, currentUser.photoURL));
+
   const card = $("my-card");
   card.innerHTML = "";
   card.appendChild(makeAvatarFor(currentUser.uid, currentUser.displayName, currentUser.photoURL));
@@ -301,7 +306,7 @@ function renderMyCard() {
   edit.type = "button";
   edit.className = "btn-ghost small";
   edit.textContent = "아바타";
-  edit.addEventListener("click", openAvatarSheet);
+  edit.addEventListener("click", (e) => { e.stopPropagation(); openAvatarSheet(); });
   card.appendChild(edit);
 }
 
@@ -1112,6 +1117,10 @@ function renderAvatarSheet() {
 }
 
 $("avatar-close").addEventListener("click", () => closeAvatarSheet());
+$("me-avatar").addEventListener("click", openAvatarSheet);
+// 내 프로필 카드(친구 탭)나 맨 위 내 이름을 눌러도 아바타 고르기
+onActivate($("my-card"), () => { if (currentUser) openAvatarSheet(); });
+onActivate($("me-name"), () => { if (currentUser) openAvatarSheet(); });
 
 $("avatar-ok").addEventListener("click", async () => {
   const btn = $("avatar-ok");
