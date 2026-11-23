@@ -273,3 +273,25 @@ html, body {
 
 /* 4-3단계: 꾹 누를 때 글자 선택·확대 메뉴 막기 */
 #room-list .list-item { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+
+/* ========== 5단계: 스티커 ========== */
+.sticker {
+  width: 140px; height: 140px; object-fit: contain; display: block;
+}
+.sticker.pending { opacity: 0.6; }
+.btn-sticker {
+  width: 46px; height: 46px; flex-shrink: 0; border-radius: 50%;
+  border: 1px solid var(--border); background: #fff; font-size: 22px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; padding: 0;
+}
+.btn-sticker.active { border-color: var(--primary); background: #eef2ff; }
+.sticker-panel {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px;
+  max-height: 220px; overflow-y: auto; padding: 10px 12px;
+  background: var(--header); border-top: 1px solid var(--border);
+}
+.sticker-pick {
+  border: 0; background: transparent; border-radius: 12px; padding: 4px; cursor: pointer;
+}
+.sticker-pick:hover { background: #f1f2f8; }
+.sticker-pick img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; }

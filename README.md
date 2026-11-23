@@ -1,4 +1,4 @@
-# 미라클톡 — 4-3단계
+# 미라클톡 — 5단계
 
 구글 로그인 + 친구 목록 + 1:1 채팅 + 단체방 + 전체 채팅방 + 프로필 아바타
 
@@ -147,6 +147,20 @@ Authentication → **설정** 탭 → **승인된 도메인** → `행님아이�
 - [ ] 친구 탭에서 그 친구를 누르면 빈 방으로 새로 시작
 - [ ] 단체방 꾹 누르기 → 기존 단체방 나가기 확인창
 
+## 5단계: 스티커 보내기
+적용: `index.html`, `app.js`, `style.css`, `sw.js`, `firestore.rules`, `README.md` 덮어쓰기
+새 파일: `stickers.js`, `stickers/` 폴더 (`miracle_best.webp`)
+→ Firebase 콘솔에서 새 `firestore.rules` **게시** (메시지에 `sticker` 칸 추가)
+
+테스트
+- [ ] 대화방 입력창 왼쪽 😊 → 스티커 칸 열림 → "미라클 최고" 누르면 바로 전송
+- [ ] 말풍선 없이 움직이는 스티커가 보임 (내 쪽은 오른쪽, 상대는 왼쪽)
+- [ ] 채팅 목록 미리보기에 "(스티커) 미라클 최고"
+- [ ] 1:1, 단체방, 전체 채팅방 모두 됨
+- [ ] 입력창을 누르면 스티커 칸이 닫힘
+
+스티커 추가: `stickers/`에 투명 WebP(또는 PNG) 넣고 `stickers.js` 목록 맨 아래에 한 줄 추가
+
 ## 데이터 구조
 ```
 users/{uid}                     — name, photo, email(소문자), lastLogin, avatar, photoData
@@ -155,7 +169,7 @@ users/{uid}/hiddenRooms/{방ID}   — hiddenAt (내가 나간 1:1 방, 나만 �
 rooms/lobby/messages/{메시지ID}   — 전체 채팅방 (방 문서 없이 메시지만)
 rooms/dm_{uidA}_{uidB}          — type, members[2], memberInfo, lastMessage, createdAt, updatedAt
 rooms/{자동ID}                    — 단체방: type:"group", name, members[], memberInfo, createdBy, lastMessage, createdAt, updatedAt
-rooms/.../messages/{메시지ID}     — uid, name, photo, text, createdAt (+ system:true 안내 메시지)
+rooms/.../messages/{메시지ID}     — uid, name, photo, text, createdAt (+ system:true 안내 메시지, + sticker: 스티커 id)
 ```
 1:1 방 ID는 두 사람의 uid를 정렬해서 붙이므로, 누가 먼저 열든 항상 같은 방으로 들어갑니다.
 

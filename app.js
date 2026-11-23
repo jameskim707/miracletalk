@@ -1,4 +1,4 @@
-// 미라클톡 4단계: 구글 로그인 + 친구 목록 + 1:1 채팅 + 단체방 + 전체 채팅방 + 프로필 아바타
+// 미라클톡 5단계: 구글 로그인 + 친구 + 1:1·단체·전체 채팅 + 프로필 아바타 + 스티커
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
@@ -10,6 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { AVATARS, findAvatar, avatarImagePath } from "./avatars.js";
+import { STICKERS, findSticker } from "./stickers.js";
 
 // ---------- 화면 요소 ----------
 const $ = (id) => document.getElementById(id);
@@ -609,6 +610,8 @@ function openRoom(roomId, title, opts = {}) {
   updateRoomHeader();
   messagesEl.innerHTML = "";
   inputEl.value = "";
+  stickerPanel.classList.add("hidden");
+  $("btn-sticker").classList.remove("active");
   show("chat");
   autoGrow(); // 화면이 보인 다음에 높이 계산 (숨겨진 상태에서 재면 0이 됨)
   // 폰의 뒤로가기 버튼으로 방에서 나올 수 있게
@@ -764,9 +767,20 @@ function render(allMsgs) {
     const line = document.createElement("div");
     line.className = "msg-line";
 
-    const bubble = document.createElement("div");
-    bubble.className = "bubble" + (m.pending ? " pending" : "");
-    bubble.textContent = m.text; // textContent 사용: 스크립트 주입 방지
+    let bubble;
+    const st = findSticker(m.sticker);
+    if (st) {
+      // 5단계: 스티커는 말풍선 없이 그림만
+      bubble = document.createElement("img");
+      bubble.className = "sticker" + (m.pending ? " pending" : "");
+      bubble.src = st.file;
+      bubble.alt = st.label;
+      bubble.title = st.label;
+    } else {
+      bubble = document.createElement("div");
+      bubble.className = "bubble" + (m.pending ? " pending" : "");
+      bubble.textContent = m.text; // textContent 사용: 스크립트 주입 방지
+    }
 
     const time = document.createElement("span");
     time.className = "msg-time";
@@ -788,11 +802,16 @@ function render(allMsgs) {
 // ---------- 메시지 보내기 ----------
 async function sendMessage() {
   const text = inputEl.value.trim();
-  const roomId = currentRoomId;
-  if (!text || !currentUser || !roomId) return;
-
+  if (!text || !currentUser || !currentRoomId) return;
   inputEl.value = "";
   autoGrow();
+  await postMessage(text, null);
+}
+
+// 글/스티커 공통 전송 (sticker가 있으면 text는 목록 미리보기용 "(스티커) 이름")
+async function postMessage(text, stickerId) {
+  const roomId = currentRoomId;
+  if (!currentUser || !roomId) return;
 
   const message = {
     uid: currentUser.uid,
@@ -801,6 +820,7 @@ async function sendMessage() {
     text,
     createdAt: serverTimestamp(),
   };
+  if (stickerId) message.sticker = stickerId;
 
   try {
     if (roomId === LOBBY_ID) {
@@ -817,7 +837,7 @@ async function sendMessage() {
     }
   } catch (err) {
     console.error(err);
-    if (currentRoomId === roomId) {
+    if (currentRoomId === roomId && !stickerId && !inputEl.value) {
       inputEl.value = text; // 실패하면 입력 내용 복구
       autoGrow();
     }
@@ -832,6 +852,35 @@ composerEl.addEventListener("submit", (e) => {
   sendMessage();
   inputEl.focus();
 });
+
+// ---------- 5단계: 스티커 고르기 칸 ----------
+const stickerPanel = $("sticker-panel");
+
+function toggleStickers(open) {
+  const willOpen = open ?? stickerPanel.classList.contains("hidden");
+  stickerPanel.classList.toggle("hidden", !willOpen);
+  $("btn-sticker").classList.toggle("active", willOpen);
+  if (willOpen && !stickerPanel.childElementCount) {
+    for (const s of STICKERS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "sticker-pick";
+      b.title = s.label;
+      const img = document.createElement("img");
+      img.src = s.file;
+      img.alt = s.label;
+      b.appendChild(img);
+      b.addEventListener("click", () => {
+        toggleStickers(false);
+        postMessage(`(스티커) ${s.label}`, s.id);
+      });
+      stickerPanel.appendChild(b);
+    }
+  }
+}
+
+$("btn-sticker").addEventListener("click", () => toggleStickers());
+inputEl.addEventListener("focus", () => toggleStickers(false));
 
 // Enter = 전송, Shift+Enter = 줄바꿈
 // isComposing 체크: 한글 입력 중 Enter가 두 번 전송되는 문제 방지
