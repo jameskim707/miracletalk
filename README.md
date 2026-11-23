@@ -1,0 +1,111 @@
+# 미라클톡 — 3단계
+
+구글 로그인 + 친구 목록 + 1:1 채팅 + 단체방 + 전체 채팅방
+
+## 파일 구성
+- `index.html` — 화면
+- `app.js` — 로그인, 메시지 보내기/받기
+- `style.css` — 디자인
+- `firebase-config.js` — **행님의 Firebase 설정값을 넣는 곳**
+- `firestore.rules` — 보안 규칙 (Firebase 콘솔에 붙여넣기)
+- `manifest.json`, `sw.js`, `icons/` — PWA 설치용
+
+## 설정 순서
+
+### 1. Firebase 프로젝트 만들기
+1. https://console.firebase.google.com 접속 → **프로젝트 추가**
+2. 이름 입력 (예: `miracletalk`) → Google 애널리틱스는 꺼도 됩니다
+
+### 2. 웹 앱 등록하고 설정값 복사
+1. 프로젝트 개요 화면에서 **`</>` (웹)** 아이콘 클릭
+2. 앱 닉네임 입력 → 등록 (Firebase 호스팅 체크는 안 해도 됨)
+3. 화면에 나오는 `firebaseConfig = { ... }` 안의 값들을 `firebase-config.js`에 그대로 옮겨 넣기
+
+### 3. Google 로그인 켜기
+1. 왼쪽 메뉴 **빌드 → Authentication → 시작하기**
+2. **로그인 방법** 탭 → **Google** → 사용 설정 → 프로젝트 지원 이메일 선택 → 저장
+
+### 4. Firestore 데이터베이스 만들기
+1. 왼쪽 메뉴 **빌드 → Firestore Database → 데이터베이스 만들기**
+2. 위치: **asia-northeast3 (서울)** 추천 (나중에 못 바꿉니다)
+3. **프로덕션 모드**로 시작
+4. 만들어지면 **규칙** 탭 → 기존 내용 전부 지우고 `firestore.rules` 내용 붙여넣기 → **게시**
+
+### 5. 내 PC에서 실행 (Windows)
+`file://`로 index.html을 바로 열면 동작하지 않습니다. 이 폴더에서 명령 프롬프트를 열고:
+
+```
+python -m http.server 8000
+```
+
+브라우저에서 http://localhost:8000 접속
+(localhost는 Firebase에 기본으로 허용돼 있어서 추가 설정이 필요 없습니다)
+
+### 6. 테스트
+- 크롬 일반 창 + 시크릿 창(다른 구글 계정)을 나란히 띄워서 주고받기
+- 확인할 것:
+  - [ ] 구글 로그인 됨
+  - [ ] 메시지 보내면 상대 창에 바로 뜸
+  - [ ] 내 메시지는 오른쪽, 상대는 왼쪽(사진+이름)
+  - [ ] 한글 입력 후 Enter 한 번에 한 번만 전송됨
+  - [ ] Shift+Enter로 줄바꿈
+  - [ ] 새로고침해도 대화 기록 남아 있음
+
+### 7. (나중에) GitHub Pages에 올릴 때
+Authentication → **설정** 탭 → **승인된 도메인** → `행님아이디.github.io` 추가
+안 하면 로그인할 때 "승인된 도메인" 오류가 납니다.
+
+## 2단계 적용 방법 (1단계를 이미 해둔 경우)
+1. 바뀐 파일 덮어쓰기: `index.html`, `app.js`, `style.css`, `sw.js`, `firestore.rules`, `README.md`
+   (`firebase-config.js`, `manifest.json`, `icons/`는 그대로)
+2. Firebase 콘솔 → Firestore Database → **규칙** 탭 → 전부 지우고 새 `firestore.rules` 붙여넣기 → **게시**
+3. 브라우저 두 곳 모두 `Ctrl+Shift+R` 새로고침 → **두 계정 모두 로그아웃 후 다시 로그인**
+   (다시 로그인해야 이메일이 프로필에 저장돼서 서로 찾을 수 있음)
+
+## 2단계 테스트
+- [ ] 로그인하면 하단에 친구 / 채팅 탭이 보임
+- [ ] 친구 탭에서 상대 구글 이메일 입력 → 추가 → 친구 목록에 나타남
+- [ ] 친구를 누르면 1:1 대화방이 열림
+- [ ] 1:1 방에서 주고받기, 상대 쪽 채팅 탭에도 그 방이 생김 (상대가 나를 친구 추가 안 해도)
+- [ ] 채팅 탭에서 마지막 메시지와 시간이 보이고, 최근 대화가 위로 올라옴
+- [ ] 전체 채팅방도 그대로 됨 (1단계 대화 기록 유지)
+- [ ] 뒤로 버튼(‹)으로 목록으로 돌아감
+
+## 3단계 적용 방법 (2단계를 이미 해둔 경우)
+1. 바뀐 파일 덮어쓰기: `index.html`, `app.js`, `style.css`, `sw.js`, `firestore.rules`, `README.md`
+   (`firebase-config.js`, `manifest.json`, `icons/`는 그대로)
+2. Firebase 콘솔 → Firestore Database → **규칙** 탭 → 전부 지우고 새 `firestore.rules` 붙여넣기 → **게시**
+   (게시 버튼을 눌렀을 때 빨간 오류가 뜨면 그 문구를 그대로 보내주세요)
+3. 브라우저 두 곳 모두 `Ctrl+Shift+R` 새로고침 (다시 로그인할 필요는 없음)
+
+## 3단계 테스트
+계정이 3개 있으면 가장 좋아요 (크롬 일반 창 + 크롬 시크릿 창 + 엣지). 2개로도 대부분 확인됩니다.
+- [ ] 채팅 탭 위쪽 **+ 새 단체방** → 친구 체크 → 방 이름 입력 → 만들기 → 방이 열림
+- [ ] 방 이름을 비워두면 "나, 친구1, 친구2"처럼 자동으로 붙음
+- [ ] 초대받은 사람 채팅 탭에 그 방이 바로 생김 (초록 아바타, 이름 옆에 인원수)
+- [ ] 단체방에서 주고받기, 상대 메시지에 이름과 사진 표시
+- [ ] 채팅 목록 미리보기가 "보낸사람: 내용"으로 나옴 (내 건 "나: 내용")
+- [ ] 방 오른쪽 위 **초대** → 이미 있는 사람은 "이미 참여 중"으로 흐리게 → 새 친구 초대 → 가운데에 "OO님이 OO님을 초대했습니다"
+- [ ] **나가기** → 확인 → 목록으로 돌아가고 내 목록에서 방이 사라짐, 남은 사람 화면에 "OO님이 나갔습니다"
+- [ ] 1:1 방에는 초대/나가기 버튼이 안 보임
+- [ ] 방 오른쪽 위에 "나: 내 이름" 표시
+- [ ] 1:1 방, 전체 채팅방은 그대로 됨
+- [ ] 친구 고르기 창에서 ‹ 버튼으로 닫힘
+
+## 데이터 구조
+```
+users/{uid}                     — name, photo, email(소문자), lastLogin
+users/{uid}/friends/{친구uid}    — name, photo, email, addedAt (나만 읽고 씀)
+rooms/lobby/messages/{메시지ID}   — 전체 채팅방 (방 문서 없이 메시지만)
+rooms/dm_{uidA}_{uidB}          — type, members[2], memberInfo, lastMessage, createdAt, updatedAt
+rooms/{자동ID}                    — 단체방: type:"group", name, members[], memberInfo, createdBy, lastMessage, createdAt, updatedAt
+rooms/.../messages/{메시지ID}     — uid, name, photo, text, createdAt (+ system:true 안내 메시지)
+```
+1:1 방 ID는 두 사람의 uid를 정렬해서 붙이므로, 누가 먼저 열든 항상 같은 방으로 들어갑니다.
+
+### 단체방 보안 규칙 요약
+- 방 참여자만 방과 메시지를 읽고 쓸 수 있음 (나간 사람은 그 순간부터 못 봄)
+- 만든 사람이 반드시 참여자, 2~50명, 방 이름 1~30자
+- 초대: 참여자만 가능, 기존 사람은 못 빼고 새 사람만 추가, 다른 사람 이름 정보 수정 금지
+- 나가기: 나 자신만 뺄 수 있음 (남을 내보내기 불가), 스스로 다시 들어오기 불가
+- 방 이름 바꾸기, 방 삭제는 아직 막혀 있음
