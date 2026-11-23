@@ -485,8 +485,8 @@ function openRoom(roomId, title, opts = {}) {
   updateRoomHeader();
   messagesEl.innerHTML = "";
   inputEl.value = "";
-  autoGrow();
   show("chat");
+  autoGrow(); // 화면이 보인 다음에 높이 계산 (숨겨진 상태에서 재면 0이 됨)
   // 폰의 뒤로가기 버튼으로 방에서 나올 수 있게
   if (opts.replace) history.replaceState({ room: roomId }, "");
   else history.pushState({ room: roomId }, "");
@@ -714,7 +714,9 @@ inputEl.addEventListener("keydown", (e) => {
 
 function autoGrow() {
   inputEl.style.height = "auto";
-  inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + "px";
+  if (!inputEl.scrollHeight) return; // 화면이 숨겨져 있으면 건너뜀
+  // border-box라서 위아래 테두리 2px를 더해야 글자가 안 잘림
+  inputEl.style.height = Math.min(inputEl.scrollHeight + 2, 140) + "px";
 }
 inputEl.addEventListener("input", autoGrow);
 
